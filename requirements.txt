@@ -1,2 +1,6 @@
 pandas
 streamlit
+Faker
+Prophet
+Plotly
+Scikit-learn
