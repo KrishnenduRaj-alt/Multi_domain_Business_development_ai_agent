@@ -4,3 +4,4 @@ Faker
 Prophet
 Plotly
 Scikit-learn
+fpdf

@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from data_loader import load_medical_store_data # Import your data loader function
+from datetime import datetime 
 
 # Helper to suppress Prophet's verbose output during fitting
 import os
@@ -19,38 +20,74 @@ def suppress_stdout_stderr():
         finally:
             sys.stdout = old_stdout
             sys.stderr = old_stderr
-# --- Page Configuration (Optional but good for aesthetics) ---
+
 st.set_page_config(
-    page_title="Smart Pharma AI Agent",
-    page_icon="💊", # A pill emoji as icon
-    layout="wide", # Use a wide layout for the dashboard
-    initial_sidebar_state="expanded" # Keep sidebar expanded by default
+    page_title="Multi Domain Business Development AI Agent", # New browser tab title
+    page_icon="🌐", # Changed to a globe for multi-domain, or you could use 🤖
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# --- Title and Introduction ---
+st.title("🤖 Business Assistant AI Agent 📊🧠📈") # New main title with multiple emojis
+st.markdown(
+    """
+    Welcome to your intelligent business assistant! This dashboard provides real-time insights,
+    sales trends, and inventory recommendations for your business across various domains.
+    """
+)
+
+# --- Sidebar for Filters & Controls ---
+st.sidebar.header("Filters & Controls")
+
+# NEW: Domain Selection
+st.sidebar.subheader("Business Domain")
+selected_domain = st.sidebar.selectbox(
+    "Select Business Type:",
+    (
+        "Medical Store",
+        "Supermarket (Coming Soon)",
+        "Hotel (Coming Soon)",
+        "Electronics Shop (Coming Soon)",
+        "Textile Shop (Coming Soon)",
+        "Book Stall (Coming Soon)",
+        "Automobile Rental (Coming Soon)",
+        "Stationary Store (Coming Soon)",
+        "Used Car Showroom (Coming Soon)",
+        "Restaurant (Coming Soon)",
+        "Fitness Center (Coming Soon)",
+        "Salon/Spa (Coming Soon)"
+    )
 )
 
 # --- Load Data ---
 # Use Streamlit's caching to load data only once and speed up app
-@st.cache_data # Use st.cache_data for data loading functions
-def get_data():
-    return load_medical_store_data()
+@st.cache_data
+def get_data(domain): # Modified to accept domain
+    file_path = ""
+    if domain == "Medical Store":
+        file_path = "simulated_medical_store_data.csv"
+    # Add more elif conditions here for other domains when you have their data
+    # elif domain == "Supermarket (Coming Soon)":
+    #     file_path = "simulated_supermarket_data.csv"
+    # elif domain == "Hotel (Coming Soon)":
+    #     file_path = "simulated_hotel_data.csv"
+    # elif domain == "Electronics Shop (Coming Soon)":
+    #     file_path = "simulated_electronics_data.csv"
+    else:
+        st.warning("Please select a valid business domain to load data.")
+        return None # Return None if no valid domain selected
 
-df = get_data()
+    return load_medical_store_data(file_path=file_path) # Pass the file_path to the loader
+
+df = get_data(selected_domain) # Pass the selected domain to get_data
 
 if df is None:
-    st.error("Failed to load data. Please check 'simulated_medical_store_data.csv' and 'data_loader.py'.")
+    st.error(f"Failed to load data for {selected_domain}. Please ensure the correct CSV file exists and the data loader is configured.")
     st.stop() # Stop the app if data loading fails
 
-# --- Title and Introduction ---
-st.title("💊 Smart Pharma AI Agent")
-st.markdown(
-    """
-    Welcome to your intelligent business assistant! This dashboard provides real-time insights,
-    sales trends, and inventory recommendations for your medical store.
-    """
-)
 
-# You can display the raw data for now to confirm it's loaded
-# st.subheader("Raw Data Preview")
-# st.dataframe(df.head()) # Display first few rows of the DataFrame
+
 
 # --- Key Performance Indicators (KPIs) ---
 st.markdown("---")
@@ -299,8 +336,90 @@ with col_cat:
     else:
         st.info("No top categories to display.")
 
-st.markdown("---") # Add a separator line
-st.write("Day 3 dashboard elements are complete!") # A message to indicate progress
+# --- Report Generation ---
+st.markdown("---")
+st.subheader("📄 Generate Business Report")
+st.write("Generate a comprehensive PDF report summarizing current insights.")
+
+# Get data needed for the report (from the already calculated variables)
+# KPIs
+report_kpis = {
+    "Total Revenue": f"£{total_sales:,.2f}",
+    "Total Items Sold": f"{total_quantity:,.0f}",
+    "Average Sale Value": f"£{average_sale_value:,.2f}"
+}
+
+# Top Products & Categories (ensure these DataFrames exist from previous sections)
+# Recalculate them if they are not globally accessible or might be filtered
+# For simplicity, we'll recalculate based on the full df for the report
+all_time_top_products = df.groupby('product_name')['total_sale'].sum().nlargest(10).reset_index()
+all_time_top_products.columns = ['Product', 'Total Sales']
+
+all_time_top_categories = df.groupby('category')['total_sale'].sum().nlargest(10).reset_index()
+all_time_top_categories.columns = ['Category', 'Total Sales']
+
+# Forecast summary (use the 'forecast' DataFrame generated in the forecasting section)
+# Ensure 'forecast' is available. If not, you might need to make it a global variable or pass it from get_data()
+# For now, assuming 'forecast' is available from the forecasting block.
+forecast_summary_for_report = pd.DataFrame()
+if 'forecast' in locals(): # Check if forecast variable exists
+    forecast_summary_for_report = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
+
+
+# Import the generate_report function
+from report_generator import generate_report
+
+if st.button("Generate & Download PDF Report"):
+    report_filename = f"Business_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+
+    # Call the report generation function
+    report_success = generate_report(
+        kpis=report_kpis,
+        top_products_df=all_time_top_products,
+        top_categories_df=all_time_top_categories,
+        forecast_summary_df=forecast_summary_for_report,
+        output_filename=report_filename
+    )
+
+    if report_success:
+        st.success(f"Report '{report_filename}' generated successfully!")
+        # Provide a download button
+        with open(report_filename, "rb") as file:
+            btn = st.download_button(
+                label="Download Report",
+                data=file,
+                file_name=report_filename,
+                mime="application/pdf"
+            )
+    else:
+        st.error("Failed to generate report. Check terminal for errors.")
+
+st.markdown("---") # Final separator
+
+# --- About Section ---
+with st.expander("ℹ️ About Smart Pharma AI Agent"):
+    st.write(
+        """
+        This application is an intelligent business development agent designed to provide
+        actionable insights from transactional data. It's built to assist small and mid-sized
+        businesses in making data-driven decisions.
+
+        **Key Features:**
+        - Real-time KPI monitoring
+        - Sales trend analysis
+        - Advanced sales forecasting
+        - Anomaly detection for unusual patterns
+        - Comprehensive PDF report generation
+        - (Coming Soon: Conversational AI Interface, Inventory Restocking Suggestions, Domain-specific recommendations)
+
+        **Developed by:** Krishnendu Raj (Student ID: 201809375)
+        """
+    )
+    st.subheader("Contact")
+    st.write("For support or inquiries, please contact: krishnendu7x463@gmail.com (Placeholder Email)")
+
+st.markdown("---") # Another separator for the very bottom
+st.write("Dashboard development for core features is complete!")
 
 
 # --- Sidebar for Filters (will be expanded later) ---
