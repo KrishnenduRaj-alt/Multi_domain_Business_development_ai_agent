@@ -5,3 +5,5 @@ Prophet
 Plotly
 Scikit-learn
 fpdf
+Openai
+python-dotenv

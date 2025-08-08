@@ -2,7 +2,28 @@ import streamlit as st
 import pandas as pd
 from data_loader import load_medical_store_data # Import your data loader function
 from datetime import datetime 
+import random 
+# --- Authentication (Placeholder) ---
+# This is a simplified authentication for demonstration purposes only.
+# DO NOT use this for production applications.
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
+if not st.session_state.logged_in:
+    st.sidebar.empty() # Clear sidebar content for login screen
+    st.title("🔒 Login to Multi Domain Business Development AI Agent")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        if username == "admin" and password == "password": # Hardcoded credentials
+            st.session_state.logged_in = True
+            st.success("Logged in successfully!")
+            st.rerun() # Rerun app to show dashboard
+        else:
+            st.error("Invalid username or password.")
+    st.stop() # Stop further execution until logged in
+# --- End Authentication ---
 # Helper to suppress Prophet's verbose output during fitting
 import os
 import sys
@@ -56,7 +77,8 @@ selected_domain = st.sidebar.selectbox(
         "Used Car Showroom (Coming Soon)",
         "Restaurant (Coming Soon)",
         "Fitness Center (Coming Soon)",
-        "Salon/Spa (Coming Soon)"
+        "Salon/Spa (Coming Soon)",
+        "Restobars/Pubs(coming soon)"
     )
 )
 
@@ -335,6 +357,107 @@ with col_cat:
         st.dataframe(top_categories, use_container_width=True, hide_index=True)
     else:
         st.info("No top categories to display.")
+# Line 472 (NEW CUSTOMER INSIGHTS CODE STARTS HERE)
+# --- Customer Insights ---
+st.markdown("---")
+st.subheader("👥 Customer Insights")
+st.write("Understanding your customer base.")
+
+# Top Customers by Total Spending
+top_spenders = df.groupby(['customer_id', 'customer_name'])['total_sale'].sum().nlargest(10).reset_index()
+top_spenders.columns = ['Customer ID', 'Customer Name', 'Total Spent']
+
+st.markdown("##### Top 10 Customers by Spending")
+if not top_spenders.empty:
+    st.dataframe(top_spenders, use_container_width=True, hide_index=True)
+else:
+    st.info("No customer spending data to display.")
+
+st.markdown("---")
+
+# Top Customers by Number of Visits/Transactions
+top_visitors = df.groupby(['customer_id', 'customer_name'])['transaction_id'].nunique().nlargest(10).reset_index()
+top_visitors.columns = ['Customer ID', 'Customer Name', 'Number of Visits']
+
+st.markdown("##### Top 10 Customers by Number of Visits")
+if not top_visitors.empty:
+    st.dataframe(top_visitors, use_container_width=True, hide_index=True)
+else:
+    st.info("No customer visit data to display.")
+
+# Line ~500 (Original Line 472, now shifted down)
+st.markdown("---") # Add a separator line
+# ... (rest of your Report Generation code and subsequent sections) ...
+# --- Inventory Management & Restocking Suggestions ---
+st.markdown("---")
+st.subheader("📦 Inventory Management & Restocking")
+st.write("Intelligent suggestions for inventory restocking and expiry tracking.")
+
+# Simulate current stock levels (for demonstration, as our data is transactional history)
+# In a real system, this would come from a live inventory database.
+# We'll assume current stock is roughly 30 days of average sales for popular items,
+# and less for others, with some randomness.
+
+# Calculate average daily sales per product for recent period (e.g., last 90 days)
+recent_sales_df = df[df['date'] >= (df['date'].max() - pd.Timedelta(days=90))]
+avg_daily_sales_per_product = recent_sales_df.groupby('product_name')['quantity'].sum() / 90 # Average over 90 days
+
+# Create a simulated current stock DataFrame
+# For simplicity, let's assume all products exist in stock
+# We'll create a dummy stock level for each product based on avg sales
+# and then identify which ones are "low"
+
+unique_products = df['product_name'].unique()
+simulated_stock_data = []
+for product in unique_products:
+    # Assume initial stock is 1.5x average daily sales for 30 days, plus some random
+    initial_stock = avg_daily_sales_per_product.get(product, 0) * 30 * random.uniform(0.8, 1.2)
+    simulated_stock_data.append({
+        'product_name': product,
+        'current_stock': max(0, round(initial_stock + random.randint(-50, 50))), # Ensure non-negative
+        'reorder_point': round(avg_daily_sales_per_product.get(product, 0) * 14) # Reorder when stock hits 14 days of sales
+    })
+simulated_stock_df = pd.DataFrame(simulated_stock_data)
+simulated_stock_df = simulated_stock_df.set_index('product_name')
+
+# Identify items for restocking
+items_to_restock = simulated_stock_df[simulated_stock_df['current_stock'] < simulated_stock_df['reorder_point']].reset_index()
+items_to_restock['suggested_order_qty'] = items_to_restock['reorder_point'] * 2 # Suggest ordering 2x reorder point
+items_to_restock['suggested_order_qty'] = items_to_restock['suggested_order_qty'].apply(lambda x: max(10, round(x))) # Min order 10
+
+st.markdown("##### 🛒 Items to Restock")
+if not items_to_restock.empty:
+    st.warning("The following items are low in stock and may need reordering:")
+    st.dataframe(items_to_restock[['product_name', 'current_stock', 'reorder_point', 'suggested_order_qty']], use_container_width=True, hide_index=True)
+else:
+    st.info("All products appear to be sufficiently stocked based on current sales trends.")
+
+# --- Expiring Products Tracking ---
+st.markdown("##### ⏳ Products Nearing Expiry")
+st.write("Monitor products that are nearing their expiration date to minimize waste.")
+
+# Filter for products expiring within the next 90 days
+today = pd.to_datetime(datetime.now().date())
+expiring_soon_threshold = today + pd.Timedelta(days=90)
+
+# Get unique products with their latest expiry date (or earliest if multiple batches)
+# This is a simplification; real systems track expiry per batch.
+# For now, we'll just check all transactions' expiry dates
+expiring_products = df[df['expiry_date'] <= expiring_soon_threshold].copy()
+
+if not expiring_products.empty:
+    # Group by product and find the earliest expiry date among those expiring soon
+    expiring_summary = expiring_products.groupby('product_name')['expiry_date'].min().reset_index()
+    expiring_summary.columns = ['Product Name', 'Earliest Expiry Date']
+    expiring_summary['Days Until Expiry'] = (expiring_summary['Earliest Expiry Date'] - today).dt.days
+
+    # Sort by soonest expiry
+    expiring_summary = expiring_summary.sort_values(by='Days Until Expiry').reset_index(drop=True)
+
+    st.error("The following products are nearing their expiry date:")
+    st.dataframe(expiring_summary[['Product Name', 'Earliest Expiry Date', 'Days Until Expiry']], use_container_width=True, hide_index=True)
+else:
+    st.info("No products are currently identified as nearing expiry within the next 90 days.")
 
 # --- Report Generation ---
 st.markdown("---")
@@ -393,6 +516,207 @@ if st.button("Generate & Download PDF Report"):
             )
     else:
         st.error("Failed to generate report. Check terminal for errors.")
+
+# --- Conversational AI Assistant (Chatbot) ---
+st.markdown("---")
+st.subheader("💬 Conversational AI Assistant")
+st.write("Ask questions about your business data in natural language.")
+
+
+# --- Prepare Data Context for the AI (THIS IS THE MOVED BLOCK) ---
+# These variables need to be defined *before* the chat_input loop
+# Calculate total sales for the last 1 year specifically for context
+# Line 499 (or similar)
+# Calculate total sales for the last 1 year specifically for context
+end_date_1y = df['date'].max()
+start_date_1y = end_date_1y - pd.Timedelta(days=365)
+total_sales_last_1_year = df[(df['date'] >= start_date_1y) & (df['date'] <= end_date_1y)]['total_sale'].sum()
+
+# Calculate total sales for the last 6 months
+start_date_6m = end_date_1y - pd.Timedelta(days=180) # Approximately 6 months
+total_sales_last_6_months = df[(df['date'] >= start_date_6m) & (df['date'] <= end_date_1y)]['total_sale'].sum()
+
+
+business_overview = f"""
+Overall Business Metrics:
+- Total Revenue (Last 2 Years): ${total_sales:,.2f}
+- Total Revenue (Last 1 Year): ${total_sales_last_1_year:,.2f}
+- Total Revenue (Last 6 Months): ${total_sales_last_6_months:,.2f}
+- Total Items Sold (Last 2 Years): {total_quantity:,.0f}
+- Average Sale Value (Overall): ${average_sale_value:,.2f}
+"""
+
+# NEW: Recent Daily Sales Context for Chatbot
+# Use the 'daily_sales' DataFrame which is already calculated for the trend chart
+recent_daily_sales_df = daily_sales.tail(30).copy() # Get last 30 days
+if not recent_daily_sales_df.empty:
+    # Format dates for better readability for the AI
+    recent_daily_sales_df['Date'] = recent_daily_sales_df['Date'].dt.strftime('%Y-%m-%d')
+    recent_daily_sales_context = f"""
+Recent Daily Sales (Last 30 Days):
+{recent_daily_sales_df.to_string(index=False)}
+"""
+else:
+    recent_daily_sales_context = "No recent daily sales data available."
+
+
+top_products_str = top_products.to_string(index=False) if not top_products.empty else "No top products data."
+top_categories_str = top_categories.to_string(index=False) if not top_categories.empty else "No top categories data."
+top_items_context = f"""
+Top Selling Items:
+{top_products_str}
+
+Top Selling Categories:
+{top_categories_str}
+"""
+
+forecast_context = ""
+if 'forecast' in locals() and not forecast.empty:
+    future_forecast = forecast[forecast['ds'] > df['date'].max()].head(7)
+    if not future_forecast.empty:
+        forecast_context = f"""
+        Sales Forecast for next 7 days:
+        {future_forecast[['ds', 'yhat']].to_string(index=False)}
+        """
+    else:
+        forecast_context = "No future sales forecast available."
+else:
+    forecast_context = "Sales forecast data not available."
+
+anomaly_context = ""
+if 'anomalies' in locals() and not anomalies.empty:
+    anomaly_context = f"""
+    Detected Sales Anomalies:
+    {anomalies[['Date', 'Daily Sales', 'anomaly_score']].to_string(index=False)}
+    """
+else:
+    anomaly_context = "No significant sales anomalies detected recently."
+
+restock_context = ""
+if 'items_to_restock' in locals() and not items_to_restock.empty:
+    restock_context = f"""
+    Items identified for restocking:
+    {items_to_restock[['product_name', 'current_stock', 'suggested_order_qty']].to_string(index=False)}
+    """
+else:
+    restock_context = "No products currently identified as low in stock."
+
+expiry_context = ""
+if 'expiring_summary' in locals() and not expiring_summary.empty:
+    expiry_context = f"""
+    Products nearing expiry:
+    {expiring_summary[['Product Name', 'Earliest Expiry Date', 'Days Until Expiry']].to_string(index=False)}
+    """
+else:
+    expiry_context = "No products currently identified as nearing expiry."
+
+inventory_context = f"""
+Inventory Status:
+{restock_context}
+{expiry_context}
+"""
+# --- END OF MOVED CONTEXT BLOCK ---
+
+
+# Initialize chat history in Streamlit's session state
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Display chat messages from history
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# Accept user input
+if prompt := st.chat_input("Ask me about your sales, inventory, or trends..."):
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # Handle simple greetings directly
+    if prompt.lower() in ["hi", "hello", "hey", "hi there"]:
+        response = "Hello! How can I assist you with your business data today?"
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        with st.chat_message("assistant"):
+            st.markdown(response)
+        st.stop() # Stop further execution for simple greetings
+
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+
+            # Combine all context into a single prompt for the Hugging Face model
+            full_context_prompt = f"""
+            You are a helpful AI business assistant. Answer the user's question **strictly and concisely** using **only** the provided "Provided Business Data" below.
+If the exact information is not explicitly present in the "Provided Business Data", state "The information is not available in the current dataset."
+Do not invent or infer information.
+            {business_overview}
+
+            {recent_daily_sales_context}
+
+            {top_items_context}
+
+            {forecast_context}
+
+            {anomaly_context}
+
+            {inventory_context}
+
+            Based on this data, please answer the user's question.
+            If the question cannot be answered from the provided data, politely state that the information is not available in the current dataset.
+            Keep your answers concise and directly relevant to the data.
+
+            User's question: {prompt}
+            """
+
+            # --- Google Gemini 2.0 Flash API Inference ---
+            import requests # Ensure requests is imported
+            import json # Ensure json is imported
+
+            try:
+                # Construct the payload for the Gemini API
+                payload = {
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [{"text": full_context_prompt}]
+                        }
+                    ],
+                    "generationConfig": {
+                        "temperature": 0.7, # Controls randomness (0.0 for deterministic, 1.0 for creative)
+                        "maxOutputTokens": 500 # Max length of the AI's response
+                    }
+                }
+
+                # API endpoint for Gemini 2.0 Flash
+                # apiKey is left empty; Canvas environment will provide it at runtime
+                api_key = "AIzaSyBrXmIAmaapJEIIneI9wlKHTzjYknzB-Ps" 
+                api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+
+                # Make the POST request to the Gemini API
+                response_raw = requests.post(api_url, headers={'Content-Type': 'application/json'}, data=json.dumps(payload))
+                response_raw.raise_for_status() # Raise an HTTPError for bad responses (4xx or 5xx)
+
+                result = response_raw.json()
+
+                if result.get("candidates") and result["candidates"][0].get("content") and result["candidates"][0]["content"].get("parts"):
+                    response = result["candidates"][0]["content"]["parts"][0]["text"]
+                else:
+                    response = "I'm sorry, I couldn't get a clear response from the AI model. The response structure was unexpected."
+
+            except requests.exceptions.RequestException as e:
+                response = f"An API request error occurred: {e}"
+                st.error(response)
+            except json.JSONDecodeError:
+                response = "Failed to decode JSON response from AI model."
+                st.error(response)
+            except Exception as e:
+                response = f"An unexpected error occurred: {e}"
+                st.error(response)
+
+            st.markdown(response)
+            # Add assistant response to chat history
+            st.session_state.messages.append({"role": "assistant", "content": response})
 
 st.markdown("---") # Final separator
 

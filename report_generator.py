@@ -9,7 +9,7 @@ class PDF(FPDF):
         # Font
         self.set_font('Arial', 'B', 15)
         # Title
-        self.cell(0, 10, 'Apex Insights AI - Business Report', 0, 1, 'C')
+        self.cell(0, 10, 'Business Assistant AI Agent - Business Report', 0, 1, 'C')
         # Line break
         self.ln(10)
 
